@@ -141,28 +141,70 @@ function IdeaPageScreen({ pageId }: { pageId: string }) {
   async function findRevenue() {
     const ids = [...selectedCws];
     if (ids.length === 0 || findRevState === "loading") return;
+
+    const items = ids
+      .map((id) => cwsList.find((c) => c.id === id))
+      .filter((c): c is CwsItem => !!c)
+      .map((c) => ({ id: c.id, name: c.name, url: c.url || undefined }));
+
     setFindRevState("loading");
-    setFindProgress([0, ids.length]);
-    for (let i = 0; i < ids.length; i++) {
-      await new Promise((r) => setTimeout(r, 800));
-      const id = ids[i];
-      store.updateCws(pageId, id, {
-        revenueFound:
-          "Estimated ~$" +
-          (Math.floor(Math.random() * 9) + 1) +
-          "k MRR. Triangulated from public posts, Twitter mentions, and pricing × converted MAU heuristics.",
-        sources: [
-          { title: "Public mention #1", url: "#" },
-          { title: "Pricing page snapshot", url: "#" },
-        ],
+    setFindProgress([0, items.length]);
+
+    try {
+      const res = await fetch("/api/find-revenue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
       });
-      setFindProgress([i + 1, ids.length]);
-    }
-    setFindRevState("done");
-    setTimeout(() => {
+      if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`);
+
+      // Read the SSE stream, applying each completed item as it arrives.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let done = 0;
+
+      for (;;) {
+        const { value, done: streamDone } = await reader.read();
+        if (streamDone) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() ?? "";
+
+        for (const chunk of chunks) {
+          const dataLine = chunk.split("\n").find((l) => l.startsWith("data:"));
+          if (!dataLine) continue;
+          const json = dataLine.slice(5).trim();
+          if (!json) continue;
+
+          const evt = JSON.parse(json) as {
+            id: string;
+            revenue_found?: string;
+            sources?: { title: string; url: string }[];
+            error?: string;
+          };
+
+          if (!evt.error && evt.revenue_found !== undefined) {
+            store.updateCws(pageId, evt.id, {
+              revenueFound: evt.revenue_found,
+              sources: evt.sources ?? [],
+            });
+          }
+          done += 1;
+          setFindProgress([done, items.length]);
+        }
+      }
+
+      setFindRevState("done");
+      setTimeout(() => {
+        setFindRevState("idle");
+        setSelectedCws(new Set());
+      }, 1200);
+    } catch (e) {
+      console.error("Find revenue failed:", e);
       setFindRevState("idle");
-      setSelectedCws(new Set());
-    }, 1200);
+    }
   }
 
   return (

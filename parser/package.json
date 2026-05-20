@@ -1,0 +1,15 @@
+{
+  "name": "idea-finder-parser",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "One-shot parser: pull real product ideas from Reddit, classify with OpenAI, insert into Supabase.",
+  "scripts": {
+    "start": "tsx run.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.1",
+    "openai": "^4.77.0",
+    "tsx": "^4.19.2"
+  }
+}

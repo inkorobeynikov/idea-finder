@@ -266,10 +266,20 @@ After completing, update ROADMAP.md: mark Step 6 as [x].
 
 ---
 
-## Step 7 — Find Revenue: Perplexity API `[ ]`
+## Step 7 — Find Revenue: Tavily API `[x]`
 
-> NOT done. The "Find revenue" button still runs the simulated client-side stub (writes a
-> fake result through `updateCws`). Wiring real Perplexity is the next backend task.
+> Done — but uses **Tavily** (`https://api.tavily.com/search`), not Perplexity. The route
+> `src/app/api/find-revenue/route.ts` authenticates the user via the RLS session client,
+> then for each selected CWS item queries Tavily (advanced search, 5 results), summarizes
+> the top snippet into `revenue_found`, collects result links into `sources`, and writes
+> the row using a **service-role** client. Results stream back as SSE (one event per item);
+> the idea page reads the stream and applies each via `store.updateCws` so rows update live
+> while the button shows "Searching... (N/total)".
+>
+> ⚠️ This is the one place a `SUPABASE_SERVICE_ROLE_KEY` is used in the app, contrary to the
+> "no service-role key anywhere" note above. The write could instead go through the same
+> RLS session client (`@/utils/supabase/server`) to stay consistent — the route already
+> holds the user's session. Requires `TAVILY_API_KEY` + `SUPABASE_SERVICE_ROLE_KEY` in env.
 
 **What**: Wire up the "Find revenue" button to Perplexity.
 
@@ -315,7 +325,14 @@ After completing, update ROADMAP.md: mark Step 7 as [x].
 
 ---
 
-## Step 8 — Parsing agent `[ ]`
+## Step 8 — Parsing agent `[~]`
+
+> In progress. Built a simpler **one-shot** version in `parser/` (`run.ts`, run with
+> `npx tsx run.ts`) instead of the multi-file VPS/cron design below: fetches Reddit JSON →
+> keyword filter (cap 30) → classify with OpenAI `gpt-4o-mini` (JSON mode) → upsert into
+> `parsed_ideas` (skip existing `source_url`). Uses `OPENAI_API_KEY` + `SUPABASE_SERVICE_ROLE_KEY`.
+> Requires `service_role` table grants — see `supabase/migrations/003_service_role_grants.sql`.
+> Still TODO for full Step 8: Indie Hackers scraping, cron, multi-file structure.
 
 **What**: Standalone Claude Code project that runs on VPS and fills parsed_ideas.
 
