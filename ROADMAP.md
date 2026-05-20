@@ -387,7 +387,29 @@ After completing, update ROADMAP.md: mark Step 8 as [x].
 
 ---
 
-## Step 9 — Deploy to Vercel `[ ]`
+## Step 9 — Enrich research panel `[x]`
+
+> Done. The expanded All Ideas row now hosts a full research panel
+> (`src/components/EnrichPanel.tsx`):
+> - **Migration `002_add_research.sql`** adds `research_analysis`, `research_comments`,
+>   `research_web`, `research_prompt`, `researched_at` to `parsed_ideas`. `ParsedIdea`
+>   gained matching optional fields; `mapIdea()` maps them; `updateIdeaResearch()`
+>   (api.ts) + a store action apply results optimistically with write-through.
+> - **`/api/enrich`** (RLS session client): fetches the Reddit thread JSON (top 5
+>   comments, skips AutoModerator/deleted) when the source is Reddit, runs a basic
+>   Tavily search, synthesizes a 4–5 sentence analysis with OpenAI `gpt-4o-mini`,
+>   then persists to `parsed_ideas` and returns `{ analysis, comments, web, researched_at }`.
+> - **Panel UI**: Source excerpt + view link; an "Enriched [date]" badge with
+>   Re-enrich + collapsible results when already researched, or a focus-note textarea
+>   + "✦ Enrich" button when not; loading state; AI Analysis / Reddit Thread / Web
+>   Finds sections; and a "Create idea page →" action.
+> - Needs `OPENAI_API_KEY` + `TAVILY_API_KEY` in env.
+
+**What**: Add a research/enrich panel to the expanded All Ideas row.
+
+---
+
+## Step 10 — Deploy to Vercel `[ ]`
 
 Manual step:
 1. Push all code to GitHub

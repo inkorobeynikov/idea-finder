@@ -10,6 +10,7 @@ import {
   parseUsers,
 } from "@/lib/data";
 import { Icon } from "@/components/icons";
+import { EnrichPanel } from "@/components/EnrichPanel";
 import {
   Checkbox,
   ComplexityCell,
@@ -306,20 +307,8 @@ export default function AllIdeasPage() {
                     </tr>
                     {isOpen && (
                       <tr className="expand-row">
-                        <td colSpan={9}>
-                          <div className="expand-inner">
-                            <span className="label">Source</span>
-                            <div className="body">
-                              <p>{row.source?.excerpt}</p>
-                              <a
-                                href={row.source?.url || "#"}
-                                className="view-source"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                View source <Icon.ext />
-                              </a>
-                            </div>
-                          </div>
+                        <td colSpan={9} onClick={(e) => e.stopPropagation()}>
+                          <EnrichPanel idea={row} />
                         </td>
                       </tr>
                     )}

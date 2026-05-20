@@ -17,7 +17,9 @@ import {
   insertCws,
   insertPage,
   removePageItem,
+  ResearchPatch,
   updateCwsRow,
+  updateIdeaResearch as updateIdeaResearchRow,
   updatePageRow,
 } from "./api";
 import { CwsItem, IdeaPage, ParsedIdea, Status } from "./data";
@@ -36,6 +38,7 @@ interface Store {
   ideasById: Record<string, ParsedIdea>;
   pages: IdeaPage[];
   getPage: (id: string) => IdeaPage | undefined;
+  updateIdeaResearch: (id: string, patch: ResearchPatch) => void;
 
   createPage: (ideaIds: string[], title?: string) => Promise<string>;
   updatePage: (page: IdeaPage) => void;
@@ -135,6 +138,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [pages],
   );
 
+  // Apply enrichment results optimistically, then write through. The /api/enrich
+  // route already persists, but we mirror the find-revenue pattern (route writes +
+  // store write-through) so local state and the DB stay in sync without a reload.
+  const updateIdeaResearch = useCallback((id: string, patch: ResearchPatch) => {
+    setIdeas((arr) =>
+      arr.map((it) => (it.id === id ? { ...it, ...patch } : it)),
+    );
+    updateIdeaResearchRow(id, patch).catch(console.error);
+  }, []);
+
   const createPage = useCallback(async (ideaIds: string[], title = "") => {
     const page = await insertPage(title, ideaIds ?? []);
     setPages((p) => [page, ...p]);
@@ -225,6 +238,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     ideasById,
     pages,
     getPage,
+    updateIdeaResearch,
     createPage,
     updatePage,
     deletePage,

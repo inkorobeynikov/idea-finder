@@ -10,6 +10,8 @@ import {
   IdeaPage,
   ParsedIdea,
   Platform,
+  ResearchComment,
+  ResearchWebResult,
   Status,
   Topic,
 } from "./data";
@@ -34,6 +36,11 @@ interface ParsedIdeaRow {
   extension: string | null;
   complexity: string | null;
   parsed_at: string;
+  research_analysis: string | null;
+  research_comments: ResearchComment[] | null;
+  research_web: ResearchWebResult[] | null;
+  research_prompt: string | null;
+  researched_at: string | null;
 }
 
 interface IdeaPageRow {
@@ -79,6 +86,11 @@ function mapIdea(r: ParsedIdeaRow): ParsedIdea {
     extension: (r.extension ?? "unknown") as Extension,
     complexity: (r.complexity ?? "medium") as Complexity,
     date: r.parsed_at,
+    researchAnalysis: r.research_analysis,
+    researchComments: r.research_comments ?? [],
+    researchWeb: r.research_web ?? [],
+    researchPrompt: r.research_prompt,
+    researchedAt: r.researched_at,
   };
 }
 
@@ -150,6 +162,29 @@ export async function fetchAll(): Promise<InitialData> {
 }
 
 /* ---------- Mutations ---------- */
+
+export interface ResearchPatch {
+  researchAnalysis?: string | null;
+  researchComments?: ResearchComment[];
+  researchWeb?: ResearchWebResult[];
+  researchPrompt?: string | null;
+  researchedAt?: string | null;
+}
+
+export async function updateIdeaResearch(
+  id: string,
+  patch: ResearchPatch,
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (patch.researchAnalysis !== undefined) row.research_analysis = patch.researchAnalysis;
+  if (patch.researchComments !== undefined) row.research_comments = patch.researchComments;
+  if (patch.researchWeb !== undefined) row.research_web = patch.researchWeb;
+  if (patch.researchPrompt !== undefined) row.research_prompt = patch.researchPrompt;
+  if (patch.researchedAt !== undefined) row.researched_at = patch.researchedAt;
+
+  const { error } = await db().from("parsed_ideas").update(row).eq("id", id);
+  if (error) throw error;
+}
 
 export async function insertPage(
   title: string,

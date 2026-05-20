@@ -22,6 +22,18 @@ export interface IdeaSource {
   excerpt: string;
 }
 
+export interface ResearchComment {
+  author: string;
+  body: string;
+  score: number;
+}
+
+export interface ResearchWebResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
 export interface ParsedIdea {
   id: string;
   name: string;
@@ -32,6 +44,12 @@ export interface ParsedIdea {
   extension: Extension;
   complexity: Complexity;
   date: string;
+  // Enrichment research (populated by /api/enrich). All optional.
+  researchAnalysis?: string | null;
+  researchComments?: ResearchComment[];
+  researchWeb?: ResearchWebResult[];
+  researchPrompt?: string | null;
+  researchedAt?: string | null;
 }
 
 export interface CwsSource {
