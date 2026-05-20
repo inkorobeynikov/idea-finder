@@ -12,7 +12,13 @@ import { Icon } from "./icons";
  * saved results. Reads research state straight off the idea so a completed enrich
  * (which updates the store) re-renders this without a reload.
  */
-export function EnrichPanel({ idea }: { idea: ParsedIdea }) {
+export function EnrichPanel({
+  idea,
+  showCreatePage = true,
+}: {
+  idea: ParsedIdea;
+  showCreatePage?: boolean;
+}) {
   const router = useRouter();
   const { updateIdeaResearch, createPage } = useStore();
 
@@ -151,23 +157,25 @@ export function EnrichPanel({ idea }: { idea: ParsedIdea }) {
       </section>
 
       {/* Footer */}
-      <div className="enrich-foot">
-        <button
-          className="btn secondary sm"
-          onClick={handleCreatePage}
-          disabled={creating}
-        >
-          {creating ? (
-            <>
-              <span className="spin dark" /> Creating…
-            </>
-          ) : (
-            <>
-              Create idea page <Icon.arrow />
-            </>
-          )}
-        </button>
-      </div>
+      {showCreatePage && (
+        <div className="enrich-foot">
+          <button
+            className="btn secondary sm"
+            onClick={handleCreatePage}
+            disabled={creating}
+          >
+            {creating ? (
+              <>
+                <span className="spin dark" /> Creating…
+              </>
+            ) : (
+              <>
+                Create idea page <Icon.arrow />
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
