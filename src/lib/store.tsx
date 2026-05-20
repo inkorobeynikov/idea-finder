@@ -4,25 +4,32 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
-  useSyncExternalStore,
 } from "react";
+import { createClient } from "@/utils/supabase/client";
 import {
-  CWS_BY_IDEA,
-  CwsItem,
-  IdeaPage,
-  MY_IDEAS,
-  PARSED_IDEAS,
-  ParsedIdea,
-  Status,
-} from "./data";
+  addPageItems,
+  deleteCwsRow,
+  deletePageRow,
+  fetchAll,
+  insertCws,
+  insertPage,
+  removePageItem,
+  updateCwsRow,
+  updatePageRow,
+} from "./api";
+import { CwsItem, IdeaPage, ParsedIdea, Status } from "./data";
 
 interface Store {
   // auth
   authed: boolean;
-  signIn: () => void;
-  signOut: () => void;
+  authReady: boolean; // initial auth state resolved
+  dataReady: boolean; // initial data load finished (or errored)
+  loadError: string | null;
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signOut: () => Promise<void>;
 
   // data
   ideas: ParsedIdea[];
@@ -30,7 +37,7 @@ interface Store {
   pages: IdeaPage[];
   getPage: (id: string) => IdeaPage | undefined;
 
-  createPage: (ideaIds: string[], title?: string) => string;
+  createPage: (ideaIds: string[], title?: string) => Promise<string>;
   updatePage: (page: IdeaPage) => void;
   deletePage: (id: string) => void;
   addIdeasToPage: (pageId: string, ideaIds: string[]) => void;
@@ -46,48 +53,63 @@ interface Store {
 
 const StoreContext = createContext<Store | null>(null);
 
-function clonedCws(): Record<string, CwsItem[]> {
-  // deep-ish clone so in-session edits never mutate the source data module
-  const out: Record<string, CwsItem[]> = {};
-  for (const [k, v] of Object.entries(CWS_BY_IDEA)) {
-    out[k] = v.map((c) => ({ ...c, sources: [...c.sources] }));
-  }
-  return out;
-}
-
-const AUTH_KEY = "if_authed";
-
-// Auth is backed by sessionStorage and exposed through useSyncExternalStore so
-// it reads correctly on the server (false) and on the client without an effect.
-const authStore = {
-  listeners: new Set<() => void>(),
-  subscribe(cb: () => void) {
-    authStore.listeners.add(cb);
-    return () => authStore.listeners.delete(cb);
-  },
-  getSnapshot() {
-    return typeof window !== "undefined" && sessionStorage.getItem(AUTH_KEY) === "1";
-  },
-  getServerSnapshot() {
-    return false;
-  },
-  set(v: boolean) {
-    if (v) sessionStorage.setItem(AUTH_KEY, "1");
-    else sessionStorage.removeItem(AUTH_KEY);
-    authStore.listeners.forEach((l) => l());
-  },
-};
-
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const authed = useSyncExternalStore(
-    authStore.subscribe,
-    authStore.getSnapshot,
-    authStore.getServerSnapshot,
-  );
+  const supabase = useMemo(() => createClient(), []);
 
-  const [ideas] = useState<ParsedIdea[]>(PARSED_IDEAS);
-  const [pages, setPages] = useState<IdeaPage[]>(MY_IDEAS);
-  const [cws, setCws] = useState<Record<string, CwsItem[]>>(clonedCws);
+  const [authed, setAuthed] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [ideas, setIdeas] = useState<ParsedIdea[]>([]);
+  const [pages, setPages] = useState<IdeaPage[]>([]);
+  const [cws, setCws] = useState<Record<string, CwsItem[]>>({});
+
+  // Resolve auth state and subscribe to changes.
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getClaims().then(({ data }) => {
+      if (!active) return;
+      setAuthed(!!data?.claims);
+      setAuthReady(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthed(!!session);
+      if (!session) {
+        setDataReady(false);
+        setIdeas([]);
+        setPages([]);
+        setCws({});
+      }
+    });
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  // Load all data once authenticated.
+  useEffect(() => {
+    if (!authed) return;
+    let active = true;
+    fetchAll()
+      .then((d) => {
+        if (!active) return;
+        setIdeas(d.ideas);
+        setPages(d.pages);
+        setCws(d.cws);
+        setLoadError(null);
+        setDataReady(true);
+      })
+      .catch((e: unknown) => {
+        if (!active) return;
+        setLoadError(e instanceof Error ? e.message : "Failed to load data");
+        setDataReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [authed]);
 
   const ideasById = useMemo(() => {
     const m: Record<string, ParsedIdea> = {};
@@ -97,35 +119,45 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return m;
   }, [ideas]);
 
-  const signIn = useCallback(() => authStore.set(true), []);
-  const signOut = useCallback(() => authStore.set(false), []);
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      return { error: error ? error.message : null };
+    },
+    [supabase],
+  );
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+  }, [supabase]);
 
   const getPage = useCallback(
     (id: string) => pages.find((p) => p.id === id),
     [pages],
   );
 
-  const createPage = useCallback((ideaIds: string[], title = "") => {
-    const id = "i_" + Math.random().toString(36).slice(2, 6);
-    const newPage: IdeaPage = {
-      id,
-      title,
-      status: "new",
-      createdAt: new Date().toISOString().slice(0, 10),
-      notes: "",
-      ideas: ideaIds ?? [],
-      cwsCount: 0,
-    };
-    setPages((p) => [newPage, ...p]);
-    return id;
+  const createPage = useCallback(async (ideaIds: string[], title = "") => {
+    const page = await insertPage(title, ideaIds ?? []);
+    setPages((p) => [page, ...p]);
+    return page.id;
   }, []);
 
   const updatePage = useCallback((updated: IdeaPage) => {
     setPages((ps) => ps.map((p) => (p.id === updated.id ? updated : p)));
+    updatePageRow(updated.id, {
+      title: updated.title,
+      status: updated.status,
+      notes: updated.notes,
+    }).catch(console.error);
   }, []);
 
   const deletePage = useCallback((id: string) => {
     setPages((ps) => ps.filter((p) => p.id !== id));
+    setCws((m) => {
+      const n = { ...m };
+      delete n[id];
+      return n;
+    });
+    deletePageRow(id).catch(console.error);
   }, []);
 
   const addIdeasToPage = useCallback((pageId: string, ideaIds: string[]) => {
@@ -136,6 +168,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           : p,
       ),
     );
+    addPageItems(pageId, ideaIds).catch(console.error);
   }, []);
 
   const removeIdeaFromPage = useCallback((pageId: string, ideaId: string) => {
@@ -146,21 +179,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           : p,
       ),
     );
+    removePageItem(pageId, ideaId).catch(console.error);
   }, []);
 
-  const getCws = useCallback(
-    (pageId: string) => cws[pageId] ?? [],
-    [cws],
-  );
-
-  const cwsCount = useCallback(
-    (page: IdeaPage) => cws[page.id]?.length ?? page.cwsCount,
-    [cws],
-  );
+  const getCws = useCallback((pageId: string) => cws[pageId] ?? [], [cws]);
+  const cwsCount = useCallback((page: IdeaPage) => cws[page.id]?.length ?? 0, [cws]);
 
   const addCws = useCallback((pageId: string, item: Omit<CwsItem, "id">) => {
-    const id = "c_" + Math.random().toString(36).slice(2, 8);
-    setCws((m) => ({ ...m, [pageId]: [{ ...item, id }, ...(m[pageId] ?? [])] }));
+    insertCws(pageId, item)
+      .then((row) =>
+        setCws((m) => ({ ...m, [pageId]: [row, ...(m[pageId] ?? [])] })),
+      )
+      .catch(console.error);
   }, []);
 
   const updateCws = useCallback(
@@ -171,6 +201,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           c.id === cwsId ? { ...c, ...patch } : c,
         ),
       }));
+      updateCwsRow(cwsId, patch).catch(console.error);
     },
     [],
   );
@@ -180,10 +211,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...m,
       [pageId]: (m[pageId] ?? []).filter((c) => c.id !== cwsId),
     }));
+    deleteCwsRow(cwsId).catch(console.error);
   }, []);
 
   const value: Store = {
     authed,
+    authReady,
+    dataReady,
+    loadError,
     signIn,
     signOut,
     ideas,

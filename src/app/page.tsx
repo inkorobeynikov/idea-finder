@@ -146,14 +146,24 @@ export default function AllIdeasPage() {
     }
   }
 
-  function handleCreate() {
+  const [creating, setCreating] = useState(false);
+
+  async function handleCreate() {
+    if (creating) return;
+    setCreating(true);
     // One page per selected idea, titled after the idea so they're
     // distinguishable in the list we redirect to.
-    [...selected].forEach((ideaId) => {
-      createPage([ideaId], ideasById[ideaId]?.name ?? "");
-    });
-    setSelected(new Set());
-    router.push("/ideas");
+    try {
+      await Promise.all(
+        [...selected].map((ideaId) =>
+          createPage([ideaId], ideasById[ideaId]?.name ?? ""),
+        ),
+      );
+      setSelected(new Set());
+      router.push("/ideas");
+    } finally {
+      setCreating(false);
+    }
   }
 
   const platformOptions: DropdownOption[] = [{ id: "all", label: "All" }, ...PLATFORMS];
@@ -191,8 +201,16 @@ export default function AllIdeasPage() {
             <button className="btn ghost sm" onClick={() => setSelected(new Set())}>
               Clear
             </button>
-            <button className="btn primary sm" onClick={handleCreate}>
-              Create idea page ({selected.size} selected) <Icon.arrow />
+            <button className="btn primary sm" onClick={handleCreate} disabled={creating}>
+              {creating ? (
+                <>
+                  <span className="spin" /> Creating…
+                </>
+              ) : (
+                <>
+                  Create idea page ({selected.size} selected) <Icon.arrow />
+                </>
+              )}
             </button>
           </div>
         )}

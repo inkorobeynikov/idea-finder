@@ -5,14 +5,22 @@ import { useStore } from "@/lib/store";
 
 export function LoginScreen() {
   const { signIn } = useStore();
-  const [email, setEmail] = useState("adam@idea-finder.dev");
-  const [pw, setPw] = useState("••••••••••");
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
-    setTimeout(() => signIn(), 480);
+    setError(null);
+    const { error } = await signIn(email.trim(), pw);
+    if (error) {
+      setError(error);
+      setLoading(false);
+    }
+    // On success, the auth listener flips `authed` and this screen unmounts.
   }
 
   return (
@@ -30,9 +38,12 @@ export function LoginScreen() {
             <label className="field-label">Email</label>
             <input
               className="input"
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@idea-finder.dev"
+              autoComplete="email"
+              required
             />
           </div>
           <div>
@@ -43,8 +54,13 @@ export function LoginScreen() {
               value={pw}
               onChange={(e) => setPw(e.target.value)}
               placeholder="••••••••"
+              autoComplete="current-password"
+              required
             />
           </div>
+          {error && (
+            <p style={{ margin: 0, fontSize: 12.5, color: "#B91C1C" }}>{error}</p>
+          )}
           <button className="btn primary" type="submit" disabled={loading}>
             {loading ? <span className="spin" /> : "Sign in"}
           </button>

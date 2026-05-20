@@ -23,8 +23,8 @@ export default function MyIdeasPage() {
     ...STATUSES,
   ];
 
-  function handleCreateEmpty() {
-    const id = createPage([]);
+  async function handleCreateEmpty() {
+    const id = await createPage([]);
     router.push(`/ideas/${id}`);
   }
 
