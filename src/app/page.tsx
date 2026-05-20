@@ -33,6 +33,7 @@ export default function AllIdeasPage() {
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState("all");
   const [ext, setExt] = useState("all");
+  const [enriched, setEnriched] = useState("all");
   const [sort, setSort] = useState<SortState>({ key: "date", dir: "desc" });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -72,9 +73,11 @@ export default function AllIdeasPage() {
         return false;
       if (platform !== "all" && it.source?.platform !== platform) return false;
       if (ext !== "all" && it.extension !== ext) return false;
+      if (enriched === "yes" && !it.researchedAt) return false;
+      if (enriched === "no" && it.researchedAt) return false;
       return true;
     });
-  }, [ideas, search, platform, ext]);
+  }, [ideas, search, platform, ext, enriched]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -169,6 +172,11 @@ export default function AllIdeasPage() {
 
   const platformOptions: DropdownOption[] = [{ id: "all", label: "All" }, ...PLATFORMS];
   const extOptions: DropdownOption[] = [{ id: "all", label: "All" }, ...EXT_OPTIONS];
+  const enrichedOptions: DropdownOption[] = [
+    { id: "all", label: "All" },
+    { id: "yes", label: "Enriched" },
+    { id: "no", label: "Not enriched" },
+  ];
 
   return (
     <div className="page">
@@ -189,6 +197,12 @@ export default function AllIdeasPage() {
           onChange={setPlatform}
         />
         <Dropdown label="Extension" value={ext} options={extOptions} onChange={setExt} />
+        <Dropdown
+          label="Enriched"
+          value={enriched}
+          options={enrichedOptions}
+          onChange={setEnriched}
+        />
       </div>
 
       <div className="actionbar">
