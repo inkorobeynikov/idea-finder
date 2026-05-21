@@ -12,6 +12,7 @@ import {
 } from "@/lib/data";
 import { Icon } from "@/components/icons";
 import { EnrichPanel } from "@/components/EnrichPanel";
+import { SeoKeywordsPanel } from "@/components/SeoKeywordsPanel";
 import {
   Checkbox,
   ComplexityCell,
@@ -546,6 +547,9 @@ function IdeaPageScreen({ pageId }: { pageId: string }) {
           </table>
         </div>
       )}
+
+      {/* ---------- SEO Keywords section ---------- */}
+      <SeoKeywordsPanel pageId={pageId} />
 
       {showAddIdeaModal && (
         <AddIdeasModal

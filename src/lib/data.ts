@@ -76,6 +76,23 @@ export interface IdeaPage {
   createdAt: string;
   notes: string;
   ideas: string[];
+  startupUrl: string | null;
+}
+
+export interface SeoKeyword {
+  id: string;
+  ideaPageId: string;
+  keyword: string;
+  globalVolume: number;
+  kd: number;
+  researchedAt: string;
+}
+
+export interface SeoResearchUrl {
+  id: string;
+  ideaPageId: string;
+  url: string;
+  label: string | null;
 }
 
 export const TOPICS: Topic[] = [

@@ -101,7 +101,8 @@
       "PowerShell(npx tsc --noEmit 2>&1)",
       "PowerShell(npx eslint src/components/EnrichPanel.tsx src/app/api/enrich/route.ts src/lib/api.ts src/lib/store.tsx src/app/page.tsx 2>&1)",
       "PowerShell(npx eslint \"src/app/ideas/[id]/page.tsx\" src/components/EnrichPanel.tsx 2>&1)",
-      "PowerShell(npx eslint src/app/page.tsx 2>&1)"
+      "PowerShell(npx eslint src/app/page.tsx 2>&1)",
+      "WebSearch"
     ],
     "deny": [
       "Bash(rm -rf *)",

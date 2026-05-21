@@ -422,6 +422,30 @@ Mark as [x] after successful deploy with real data.
 
 ---
 
+## Step 11 — SEO Keywords panel `[~]`
+
+> In progress. Adds a **SEO Keywords** section to the idea detail page
+> (`src/components/SeoKeywordsPanel.tsx`), below the CWS section.
+>
+> - **Migration `004_seo_keywords.sql`** adds `idea_pages.startup_url` and two RLS tables:
+>   `seo_keywords` (keyword / global_volume / kd, per page) and `seo_research_urls`
+>   (manual research URLs). `IdeaPage` gained `startupUrl`; `SeoKeyword` / `SeoResearchUrl`
+>   types added to `data.ts`; `api.ts` maps them and `fetchAll` hydrates both keyed by
+>   page id; store gained `saveKeywords`, `getKeywords`, `getSeoUrls`, `addSeoUrl`,
+>   `updateSeoUrl`, `removeSeoUrl`, `updateStartupUrl` (optimistic write-through).
+> - **URL table**: editable Startup row + read-only CWS extension URLs + manual rows
+>   (`+ Add URL`). **Keyword table**: client-sortable `Keyword | Global Volume | KD %`,
+>   default KD asc, filtered to Global Volume > 2000.
+> - **`/api/ideas/[id]/seo-keywords`** (RLS session client): extracts candidate keywords
+>   from each URL's `<title>` + meta description, then queries SEMrush. **Primary path**
+>   is the SEMrush Analytics API (`phrase_fullsearch`, broad match) when `SEMRUSH_API_KEY`
+>   is set — returns `{ mode: "results" }`. **Fallback** when no key: returns
+>   `{ mode: "candidates" }` and Claude scrapes Keyword Magic in Chrome, then persists via
+>   `store.saveKeywords` (RLS browser client). The route never writes the DB itself.
+> - Needs optional `SEMRUSH_API_KEY` in env (absence triggers the agent fallback).
+
+---
+
 ## Backlog
 
 - [ ] Auto-parse Chrome Web Store for CWS table

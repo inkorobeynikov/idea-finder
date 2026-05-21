@@ -12,6 +12,8 @@ import {
   Platform,
   ResearchComment,
   ResearchWebResult,
+  SeoKeyword,
+  SeoResearchUrl,
   Status,
   Topic,
 } from "./data";
@@ -49,6 +51,7 @@ interface IdeaPageRow {
   status: string | null;
   notes: string | null;
   created_at: string;
+  startup_url: string | null;
 }
 
 interface IdeaPageItemRow {
@@ -67,6 +70,22 @@ interface CwsItemRow {
   revenue_found: string | null;
   sources: CwsSource[] | null;
   notes: string | null;
+}
+
+interface SeoKeywordRow {
+  id: string;
+  idea_page_id: string;
+  keyword: string;
+  global_volume: number;
+  kd: number;
+  researched_at: string;
+}
+
+interface SeoResearchUrlRow {
+  id: string;
+  idea_page_id: string;
+  url: string;
+  label: string | null;
 }
 
 /* ---------- Mappers ---------- */
@@ -102,6 +121,7 @@ function mapPage(r: IdeaPageRow, ideaIds: string[]): IdeaPage {
     notes: r.notes ?? "",
     createdAt: r.created_at,
     ideas: ideaIds,
+    startupUrl: r.startup_url ?? null,
   };
 }
 
@@ -119,25 +139,55 @@ function mapCws(r: CwsItemRow): CwsItem {
   };
 }
 
+function mapKeyword(r: SeoKeywordRow): SeoKeyword {
+  return {
+    id: r.id,
+    ideaPageId: r.idea_page_id,
+    keyword: r.keyword,
+    globalVolume: r.global_volume,
+    kd: r.kd,
+    researchedAt: r.researched_at,
+  };
+}
+
+function mapResearchUrl(r: SeoResearchUrlRow): SeoResearchUrl {
+  return {
+    id: r.id,
+    ideaPageId: r.idea_page_id,
+    url: r.url,
+    label: r.label,
+  };
+}
+
 /* ---------- Initial load ---------- */
 
 export interface InitialData {
   ideas: ParsedIdea[];
   pages: IdeaPage[];
   cws: Record<string, CwsItem[]>;
+  keywords: Record<string, SeoKeyword[]>;
+  seoUrls: Record<string, SeoResearchUrl[]>;
 }
 
 export async function fetchAll(): Promise<InitialData> {
   const supabase = db();
-  const [ideasRes, pagesRes, itemsRes, cwsRes] = await Promise.all([
-    supabase.from("parsed_ideas").select("*").order("parsed_at", { ascending: false }),
-    supabase.from("idea_pages").select("*").order("created_at", { ascending: false }),
-    supabase.from("idea_page_items").select("idea_page_id, parsed_idea_id"),
-    supabase.from("cws_items").select("*").order("created_at", { ascending: true }),
-  ]);
+  const [ideasRes, pagesRes, itemsRes, cwsRes, keywordsRes, seoUrlsRes] =
+    await Promise.all([
+      supabase.from("parsed_ideas").select("*").order("parsed_at", { ascending: false }),
+      supabase.from("idea_pages").select("*").order("created_at", { ascending: false }),
+      supabase.from("idea_page_items").select("idea_page_id, parsed_idea_id"),
+      supabase.from("cws_items").select("*").order("created_at", { ascending: true }),
+      supabase.from("seo_keywords").select("*").order("kd", { ascending: true }),
+      supabase.from("seo_research_urls").select("*"),
+    ]);
 
   const firstError =
-    ideasRes.error || pagesRes.error || itemsRes.error || cwsRes.error;
+    ideasRes.error ||
+    pagesRes.error ||
+    itemsRes.error ||
+    cwsRes.error ||
+    keywordsRes.error ||
+    seoUrlsRes.error;
   if (firstError) throw firstError;
 
   const ideas = (ideasRes.data as ParsedIdeaRow[]).map(mapIdea);
@@ -158,7 +208,17 @@ export async function fetchAll(): Promise<InitialData> {
     (cws[c.idea_page_id] ??= []).push(mapCws(c));
   }
 
-  return { ideas, pages, cws };
+  // Group keywords + research URLs by page id.
+  const keywords: Record<string, SeoKeyword[]> = {};
+  for (const k of keywordsRes.data as SeoKeywordRow[]) {
+    (keywords[k.idea_page_id] ??= []).push(mapKeyword(k));
+  }
+  const seoUrls: Record<string, SeoResearchUrl[]> = {};
+  for (const u of seoUrlsRes.data as SeoResearchUrlRow[]) {
+    (seoUrls[u.idea_page_id] ??= []).push(mapResearchUrl(u));
+  }
+
+  return { ideas, pages, cws, keywords, seoUrls };
 }
 
 /* ---------- Mutations ---------- */
@@ -293,5 +353,77 @@ export async function updateCwsRow(
 
 export async function deleteCwsRow(id: string): Promise<void> {
   const { error } = await db().from("cws_items").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/* ---------- SEO keywords ---------- */
+
+export async function updatePageStartupUrl(
+  pageId: string,
+  url: string,
+): Promise<void> {
+  const { error } = await db()
+    .from("idea_pages")
+    .update({ startup_url: url || null })
+    .eq("id", pageId);
+  if (error) throw error;
+}
+
+/** Replace all keyword rows for a page with a fresh result set (delete + bulk insert). */
+export async function saveKeywords(
+  pageId: string,
+  rows: Array<{ keyword: string; globalVolume: number; kd: number }>,
+): Promise<SeoKeyword[]> {
+  const supabase = db();
+  const { error: delError } = await supabase
+    .from("seo_keywords")
+    .delete()
+    .eq("idea_page_id", pageId);
+  if (delError) throw delError;
+
+  if (rows.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("seo_keywords")
+    .insert(
+      rows.map((r) => ({
+        idea_page_id: pageId,
+        keyword: r.keyword,
+        global_volume: r.globalVolume,
+        kd: r.kd,
+      })),
+    )
+    .select();
+  if (error) throw error;
+  return (data as SeoKeywordRow[]).map(mapKeyword);
+}
+
+export async function insertSeoResearchUrl(
+  pageId: string,
+  url: string,
+  label?: string,
+): Promise<SeoResearchUrl> {
+  const { data, error } = await db()
+    .from("seo_research_urls")
+    .insert({ idea_page_id: pageId, url, label: label ?? null })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapResearchUrl(data as SeoResearchUrlRow);
+}
+
+export async function updateSeoResearchUrlRow(
+  id: string,
+  patch: Partial<Pick<SeoResearchUrl, "url" | "label">>,
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (patch.url !== undefined) row.url = patch.url;
+  if (patch.label !== undefined) row.label = patch.label;
+  const { error } = await db().from("seo_research_urls").update(row).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteSeoResearchUrlRow(id: string): Promise<void> {
+  const { error } = await db().from("seo_research_urls").delete().eq("id", id);
   if (error) throw error;
 }

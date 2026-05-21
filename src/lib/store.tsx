@@ -13,16 +13,28 @@ import {
   addPageItems,
   deleteCwsRow,
   deletePageRow,
+  deleteSeoResearchUrlRow,
   fetchAll,
   insertCws,
   insertPage,
+  insertSeoResearchUrl,
   removePageItem,
   ResearchPatch,
+  saveKeywords as saveKeywordsRow,
   updateCwsRow,
   updateIdeaResearch as updateIdeaResearchRow,
   updatePageRow,
+  updatePageStartupUrl,
+  updateSeoResearchUrlRow,
 } from "./api";
-import { CwsItem, IdeaPage, ParsedIdea, Status } from "./data";
+import {
+  CwsItem,
+  IdeaPage,
+  ParsedIdea,
+  SeoKeyword,
+  SeoResearchUrl,
+  Status,
+} from "./data";
 
 interface Store {
   // auth
@@ -52,6 +64,22 @@ interface Store {
   addCws: (pageId: string, item: Omit<CwsItem, "id">) => void;
   updateCws: (pageId: string, cwsId: string, patch: Partial<CwsItem>) => void;
   removeCws: (pageId: string, cwsId: string) => void;
+
+  // SEO keyword research, keyed by page id
+  getKeywords: (pageId: string) => SeoKeyword[];
+  saveKeywords: (
+    pageId: string,
+    rows: Array<{ keyword: string; globalVolume: number; kd: number }>,
+  ) => Promise<void>;
+  getSeoUrls: (pageId: string) => SeoResearchUrl[];
+  addSeoUrl: (pageId: string, url: string, label?: string) => void;
+  updateSeoUrl: (
+    pageId: string,
+    id: string,
+    patch: Partial<Pick<SeoResearchUrl, "url" | "label">>,
+  ) => void;
+  removeSeoUrl: (pageId: string, id: string) => void;
+  updateStartupUrl: (pageId: string, url: string) => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -67,6 +95,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [ideas, setIdeas] = useState<ParsedIdea[]>([]);
   const [pages, setPages] = useState<IdeaPage[]>([]);
   const [cws, setCws] = useState<Record<string, CwsItem[]>>({});
+  const [keywords, setKeywords] = useState<Record<string, SeoKeyword[]>>({});
+  const [seoUrls, setSeoUrls] = useState<Record<string, SeoResearchUrl[]>>({});
 
   // Resolve auth state and subscribe to changes.
   useEffect(() => {
@@ -83,6 +113,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setIdeas([]);
         setPages([]);
         setCws({});
+        setKeywords({});
+        setSeoUrls({});
       }
     });
     return () => {
@@ -101,6 +133,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setIdeas(d.ideas);
         setPages(d.pages);
         setCws(d.cws);
+        setKeywords(d.keywords);
+        setSeoUrls(d.seoUrls);
         setLoadError(null);
         setDataReady(true);
       })
@@ -170,6 +204,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       delete n[id];
       return n;
     });
+    setKeywords((m) => {
+      const n = { ...m };
+      delete n[id];
+      return n;
+    });
+    setSeoUrls((m) => {
+      const n = { ...m };
+      delete n[id];
+      return n;
+    });
     deletePageRow(id).catch(console.error);
   }, []);
 
@@ -227,6 +271,74 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     deleteCwsRow(cwsId).catch(console.error);
   }, []);
 
+  /* ---------- SEO keywords ---------- */
+
+  const getKeywords = useCallback(
+    (pageId: string) => keywords[pageId] ?? [],
+    [keywords],
+  );
+
+  // Persist a fresh result set, then replace local state with the saved rows.
+  // Used by both the SEMrush API path and the Claude-in-Chrome agent fallback.
+  const saveKeywords = useCallback(
+    async (
+      pageId: string,
+      rows: Array<{ keyword: string; globalVolume: number; kd: number }>,
+    ) => {
+      const saved = await saveKeywordsRow(pageId, rows);
+      setKeywords((m) => ({ ...m, [pageId]: saved }));
+    },
+    [],
+  );
+
+  const getSeoUrls = useCallback(
+    (pageId: string) => seoUrls[pageId] ?? [],
+    [seoUrls],
+  );
+
+  const addSeoUrl = useCallback(
+    (pageId: string, url: string, label?: string) => {
+      insertSeoResearchUrl(pageId, url, label)
+        .then((row) =>
+          setSeoUrls((m) => ({ ...m, [pageId]: [...(m[pageId] ?? []), row] })),
+        )
+        .catch(console.error);
+    },
+    [],
+  );
+
+  const updateSeoUrl = useCallback(
+    (
+      pageId: string,
+      id: string,
+      patch: Partial<Pick<SeoResearchUrl, "url" | "label">>,
+    ) => {
+      setSeoUrls((m) => ({
+        ...m,
+        [pageId]: (m[pageId] ?? []).map((u) =>
+          u.id === id ? { ...u, ...patch } : u,
+        ),
+      }));
+      updateSeoResearchUrlRow(id, patch).catch(console.error);
+    },
+    [],
+  );
+
+  const removeSeoUrl = useCallback((pageId: string, id: string) => {
+    setSeoUrls((m) => ({
+      ...m,
+      [pageId]: (m[pageId] ?? []).filter((u) => u.id !== id),
+    }));
+    deleteSeoResearchUrlRow(id).catch(console.error);
+  }, []);
+
+  const updateStartupUrl = useCallback((pageId: string, url: string) => {
+    setPages((ps) =>
+      ps.map((p) => (p.id === pageId ? { ...p, startupUrl: url || null } : p)),
+    );
+    updatePageStartupUrl(pageId, url).catch(console.error);
+  }, []);
+
   const value: Store = {
     authed,
     authReady,
@@ -249,6 +361,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     addCws,
     updateCws,
     removeCws,
+    getKeywords,
+    saveKeywords,
+    getSeoUrls,
+    addSeoUrl,
+    updateSeoUrl,
+    removeSeoUrl,
+    updateStartupUrl,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
