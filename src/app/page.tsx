@@ -295,7 +295,20 @@ export default function AllIdeasPage() {
                         <span className={`chev ${isOpen ? "open" : ""}`}>
                           <Icon.chev />
                         </span>
-                        <span className="name-text">{row.name}</span>
+                        {row.productUrl ? (
+                          <a
+                            href={row.productUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="name-text subtle-link"
+                            style={{ color: "var(--ink)", fontWeight: 500 }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {row.name}
+                          </a>
+                        ) : (
+                          <span className="name-text">{row.name}</span>
+                        )}
                       </td>
                       <td>
                         <TopicsCell topics={row.topics} />

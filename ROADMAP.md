@@ -446,6 +446,46 @@ Mark as [x] after successful deploy with real data.
 
 ---
 
+## Step 12 — Product URL on parsed ideas `[x]`
+
+> Done. Added `product_url` column to `parsed_ideas` (migration `005_product_url.sql`)
+> and surfaced it as a clickable link in the All Ideas table name cell. On the idea
+> detail page, the Ideas section table got a new 32px column showing
+> `<Icon.ext />` linking out to the product when the URL is set. `ParsedIdea`
+> gained an optional `productUrl`; `api.ts` maps `product_url` ↔ `productUrl` and a
+> new `updateIdeaProductUrl` mutation lets the store apply optimistic updates.
+
+---
+
+## Step 13 — SEO Keywords default sort + KD color `[x]`
+
+> Done in `SeoKeywordsPanel.tsx`. Default sort is now **Global Volume descending**
+> (was KD asc) so the highest-traffic terms surface first. KD values below 70
+> render in amber (`#D97706`) with bold weight as a "viable" signal; KD ≥ 70
+> stays in the existing muted gray.
+
+---
+
+## Step 14 — Competitors section on idea page `[x]`
+
+> Done. New `competitors` table (migration `006_competitors.sql`, RLS
+> authenticated_all, cascade on `idea_page_id`) plus a full Competitors section on
+> the idea detail page, placed between Ideas and Chrome Web Store. Two entry
+> points:
+> - **+ Add manually** — modal with Name, Product URL, Revenue, MAU, Notes
+> - **+ Find competitors** — preview modal that calls
+>   `/api/ideas/[id]/competitors/find` (3 parallel Tavily searches deduped to 15
+>   results, OpenAI `gpt-4o-mini` extracts structured competitor data). Operator
+>   checks the rows they want and clicks **Add selected** — only then are rows
+>   persisted via `store.addCompetitor`.
+> - `data.ts` gained a `Competitor` interface; `api.ts` got `mapCompetitor`,
+>   `insertCompetitor`, `updateCompetitorRow`, `deleteCompetitorRow`, and
+>   `fetchAll` now hydrates competitors keyed by page id; store exposes
+>   `getCompetitors` / `addCompetitor` / `updateCompetitor` / `removeCompetitor`
+>   with the same optimistic + write-through pattern as CWS.
+
+---
+
 ## Backlog
 
 - [ ] Auto-parse Chrome Web Store for CWS table

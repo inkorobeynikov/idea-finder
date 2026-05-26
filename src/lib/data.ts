@@ -44,6 +44,7 @@ export interface ParsedIdea {
   extension: Extension;
   complexity: Complexity;
   date: string;
+  productUrl?: string | null;
   // Enrichment research (populated by /api/enrich). All optional.
   researchAnalysis?: string | null;
   researchComments?: ResearchComment[];
@@ -66,6 +67,20 @@ export interface CwsItem {
   paid: boolean;
   revenueFound: string | null;
   sources: CwsSource[];
+  notes: string;
+}
+
+export interface Competitor {
+  id: string;
+  ideaPageId: string;
+  name: string;
+  productUrl: string | null;
+  revenue: string | null;
+  mau: string | null;
+  topics: Topic[];
+  extension: Extension;
+  complexity: Complexity | null;
+  sourceUrl: string | null;
   notes: string;
 }
 

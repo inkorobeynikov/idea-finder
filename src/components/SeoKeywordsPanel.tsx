@@ -24,7 +24,7 @@ export function SeoKeywordsPanel({ pageId }: { pageId: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<string[] | null>(null);
-  const [sort, setSort] = useState<SortState>({ key: "kd", dir: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "globalVolume", dir: "desc" });
 
   function onSort(key: string) {
     setSort((s) =>
@@ -243,8 +243,12 @@ export function SeoKeywordsPanel({ pageId }: { pageId: string }) {
                     {k.globalVolume.toLocaleString()}
                   </td>
                   <td
-                    className="cell-tabular cell-mono cell-muted"
-                    style={{ textAlign: "right" }}
+                    className="cell-tabular cell-mono"
+                    style={{
+                      textAlign: "right",
+                      color: k.kd < 70 ? "#D97706" : "var(--muted)",
+                      fontWeight: k.kd < 70 ? 600 : undefined,
+                    }}
                   >
                     {k.kd}
                   </td>

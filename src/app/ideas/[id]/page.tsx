@@ -1,13 +1,15 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import {
+  Competitor,
   CwsItem,
   ParsedIdea,
   STATUSES,
   Status,
+  Topic as TopicName,
   formatShortDate,
 } from "@/lib/data";
 import { Icon } from "@/components/icons";
@@ -17,6 +19,7 @@ import {
   Checkbox,
   ComplexityCell,
   Dropdown,
+  ExtBadge,
   InlineEdit,
   MauCell,
   Modal,
@@ -101,6 +104,14 @@ function IdeaPageScreen({ pageId }: { pageId: string }) {
   const [showAddCwsModal, setShowAddCwsModal] = useState(false);
   const [findRevState, setFindRevState] = useState<"idle" | "loading" | "done">("idle");
   const [findProgress, setFindProgress] = useState<[number, number]>([0, 0]);
+
+  // Competitors state
+  const competitorsList = store.getCompetitors(pageId);
+  const [showFindCompetitorsModal, setShowFindCompetitorsModal] = useState(false);
+  const [showAddCompetitorModal, setShowAddCompetitorModal] = useState(false);
+
+  const ideaNameForFind = ideaRows[0]?.name ?? (title || "this idea");
+  const topicsForFind = ideaRows[0]?.topics ?? [];
 
   function toggleCwsSel(id: string) {
     setSelectedCws((s) => {
@@ -276,6 +287,7 @@ function IdeaPageScreen({ pageId }: { pageId: string }) {
                 <col style={{ width: 80 }} />
                 <col style={{ width: 80 }} />
                 <col style={{ width: 115 }} />
+                <col style={{ width: 32 }} />
                 <col style={{ width: 40 }} />
               </colgroup>
               <thead>
@@ -286,6 +298,7 @@ function IdeaPageScreen({ pageId }: { pageId: string }) {
                   <th>MAU</th>
                   <th>Source</th>
                   <th>Complexity</th>
+                  <th></th>
                   <th></th>
                 </tr>
               </thead>
@@ -317,6 +330,20 @@ function IdeaPageScreen({ pageId }: { pageId: string }) {
                           <ComplexityCell value={row.complexity} />
                         </td>
                         <td>
+                          {row.productUrl ? (
+                            <a
+                              href={row.productUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              title="Open product"
+                              style={{ color: "var(--muted)", display: "inline-flex" }}
+                            >
+                              <Icon.ext />
+                            </a>
+                          ) : null}
+                        </td>
+                        <td>
                           <button
                             className="row-x"
                             onClick={(e) => {
@@ -331,7 +358,7 @@ function IdeaPageScreen({ pageId }: { pageId: string }) {
                       </tr>
                       {isOpen && (
                         <tr className="expand-row">
-                          <td colSpan={7} onClick={(e) => e.stopPropagation()}>
+                          <td colSpan={8} onClick={(e) => e.stopPropagation()}>
                             <EnrichPanel idea={row} showCreatePage={false} />
                           </td>
                         </tr>
@@ -346,6 +373,125 @@ function IdeaPageScreen({ pageId }: { pageId: string }) {
             <Icon.plus /> Add idea from database
           </button>
         </>
+      )}
+
+      {/* ---------- Competitors section ---------- */}
+      <div className="section-head" style={{ marginTop: 34 }}>
+        <span className="section-title">Competitors</span>
+        <span style={{ color: "var(--muted-2)", fontSize: 12 }}>
+          {competitorsList.length}
+        </span>
+        <span className="section-line" />
+      </div>
+
+      <div className="section-toolbar">
+        <span className="left">
+          {competitorsList.length}{" "}
+          {competitorsList.length === 1 ? "competitor" : "competitors"}
+        </span>
+        <span className="spacer" />
+        <button
+          className="btn secondary sm"
+          onClick={() => setShowAddCompetitorModal(true)}
+        >
+          <Icon.plus /> Add manually
+        </button>
+        <button
+          className="btn primary sm"
+          onClick={() => setShowFindCompetitorsModal(true)}
+        >
+          <Icon.sparkles /> Find competitors
+        </button>
+      </div>
+
+      {competitorsList.length === 0 ? (
+        <button
+          className="add-row-btn"
+          onClick={() => setShowFindCompetitorsModal(true)}
+        >
+          <Icon.plus /> Find competitors from the web
+        </button>
+      ) : (
+        <div className="table-wrap">
+          <table className="t">
+            <colgroup>
+              <col />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 80 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 115 }} />
+              <col style={{ width: 200 }} />
+              <col style={{ width: 40 }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Revenue</th>
+                <th>MAU</th>
+                <th>Extension?</th>
+                <th>Complexity</th>
+                <th>Notes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {competitorsList.map((c) => (
+                <tr className="row" key={c.id}>
+                  <td className="cell-name">
+                    <span className="name-text">{c.name}</span>
+                    {c.productUrl ? (
+                      <a
+                        href={c.productUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Open product"
+                        style={{
+                          color: "var(--muted)",
+                          display: "inline-flex",
+                          marginLeft: 6,
+                          verticalAlign: "middle",
+                        }}
+                      >
+                        <Icon.ext />
+                      </a>
+                    ) : null}
+                  </td>
+                  <td>
+                    <RevenueCell value={c.revenue} />
+                  </td>
+                  <td>
+                    <MauCell value={c.mau} />
+                  </td>
+                  <td>
+                    <ExtBadge value={c.extension} />
+                  </td>
+                  <td>
+                    <ComplexityCell value={c.complexity ?? "medium"} />
+                  </td>
+                  <td>
+                    <InlineEdit
+                      value={c.notes}
+                      onChange={(v) =>
+                        store.updateCompetitor(pageId, c.id, { notes: v })
+                      }
+                      placeholder="Add note..."
+                    />
+                  </td>
+                  <td>
+                    <button
+                      className="row-x"
+                      onClick={() => store.removeCompetitor(pageId, c.id)}
+                      title="Remove competitor"
+                    >
+                      <Icon.x />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* ---------- CWS section ---------- */}
@@ -569,6 +715,31 @@ function IdeaPageScreen({ pageId }: { pageId: string }) {
           onAdd={(item) => {
             store.addCws(pageId, item);
             setShowAddCwsModal(false);
+          }}
+        />
+      )}
+
+      {showFindCompetitorsModal && (
+        <FindCompetitorsModal
+          pageId={pageId}
+          ideaName={ideaNameForFind}
+          topics={topicsForFind}
+          onClose={() => setShowFindCompetitorsModal(false)}
+          onAdd={(items) => {
+            for (const item of items) {
+              store.addCompetitor(pageId, item);
+            }
+            setShowFindCompetitorsModal(false);
+          }}
+        />
+      )}
+
+      {showAddCompetitorModal && (
+        <AddCompetitorModal
+          onClose={() => setShowAddCompetitorModal(false)}
+          onAdd={(item) => {
+            store.addCompetitor(pageId, item);
+            setShowAddCompetitorModal(false);
           }}
         />
       )}
@@ -833,6 +1004,304 @@ function AddCwsModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="What stands out about this extension..."
+            />
+          </div>
+        </div>
+      </div>
+      <div className="modal-foot">
+        <span className="spacer" />
+        <button className="btn ghost" onClick={onClose}>
+          Cancel
+        </button>
+        <button className="btn primary" disabled={!canSave} onClick={submit}>
+          Add
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------- Find competitors modal (Tavily + OpenAI) ---------- */
+type CompetitorDraft = Omit<Competitor, "id" | "ideaPageId">;
+
+function FindCompetitorsModal({
+  pageId,
+  ideaName,
+  topics,
+  onClose,
+  onAdd,
+}: {
+  pageId: string;
+  ideaName: string;
+  topics: TopicName[];
+  onClose: () => void;
+  onAdd: (items: CompetitorDraft[]) => void;
+}) {
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [error, setError] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<CompetitorDraft[]>([]);
+  const [sel, setSel] = useState<Set<number>>(new Set());
+
+  const fetchCompetitors = useCallback(async () => {
+    setState("loading");
+    setError(null);
+    try {
+      const res = await fetch(`/api/ideas/${pageId}/competitors/find`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ideaName, topics }),
+      });
+      const data: {
+        error?: string;
+        competitors?: Array<{
+          name: string;
+          productUrl: string | null;
+          revenue: string | null;
+          mau: string | null;
+          sourceUrl: string | null;
+          topics: string[];
+          extension: string;
+          complexity: string | null;
+          notes?: string;
+        }>;
+      } = await res.json().catch(() => ({ competitors: [] }));
+
+      if (!res.ok || data.error) {
+        setError(data.error || `Request failed (${res.status})`);
+        setState("error");
+        return;
+      }
+
+      const items: CompetitorDraft[] = (data.competitors ?? []).map((c) => ({
+        name: c.name,
+        productUrl: c.productUrl,
+        revenue: c.revenue,
+        mau: c.mau,
+        topics: (c.topics ?? []) as TopicName[],
+        extension: (c.extension ?? "unknown") as CompetitorDraft["extension"],
+        complexity: (c.complexity ?? null) as CompetitorDraft["complexity"],
+        sourceUrl: c.sourceUrl,
+        notes: c.notes ?? "",
+      }));
+      setCandidates(items);
+      setState("ready");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error");
+      setState("error");
+    }
+  }, [pageId, ideaName, topics]);
+
+  useEffect(() => {
+    fetchCompetitors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function toggle(i: number) {
+    setSel((s) => {
+      const n = new Set(s);
+      if (n.has(i)) n.delete(i);
+      else n.add(i);
+      return n;
+    });
+  }
+
+  function submit() {
+    const items = [...sel].map((i) => candidates[i]).filter(Boolean);
+    if (items.length === 0) return;
+    onAdd(items);
+  }
+
+  return (
+    <Modal onClose={onClose} size="lg">
+      <div className="modal-head">
+        <h3>Find competitors</h3>
+        <span className="spacer" />
+        <button className="btn ghost icon" onClick={onClose}>
+          <Icon.x />
+        </button>
+      </div>
+      <div className="modal-body">
+        {state === "loading" && (
+          <div
+            style={{
+              padding: "32px 8px",
+              textAlign: "center",
+              color: "var(--muted)",
+              fontSize: 13,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+            }}
+          >
+            <span className="spin" /> Searching the web…
+          </div>
+        )}
+        {state === "error" && (
+          <div
+            style={{
+              padding: "24px 8px",
+              textAlign: "center",
+              color: "#B91C1C",
+              fontSize: 13,
+            }}
+          >
+            {error || "Search failed."}
+          </div>
+        )}
+        {state === "ready" && candidates.length === 0 && (
+          <div
+            style={{
+              padding: "24px 8px",
+              textAlign: "center",
+              color: "var(--muted)",
+              fontSize: 12.5,
+            }}
+          >
+            No competitor candidates found.
+          </div>
+        )}
+        {state === "ready" && candidates.length > 0 && (
+          <div className="modal-list">
+            {candidates.map((c, i) => (
+              <div
+                key={i}
+                className={`modal-list-item ${sel.has(i) ? "selected" : ""}`}
+                onClick={() => toggle(i)}
+              >
+                <Checkbox checked={sel.has(i)} onChange={() => toggle(i)} />
+                <div className="name">{c.name}</div>
+                <div className={`rev ${c.revenue ? "has" : ""}`}>
+                  {c.revenue || "—"}
+                </div>
+                <div
+                  style={{
+                    fontSize: 11.5,
+                    color: "var(--muted)",
+                    maxWidth: 240,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {c.productUrl ?? c.sourceUrl ?? ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="modal-foot">
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+          {sel.size} selected
+        </span>
+        <span className="spacer" />
+        <button className="btn ghost" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          className="btn primary"
+          disabled={sel.size === 0}
+          onClick={submit}
+        >
+          Add selected {sel.size > 0 ? `(${sel.size})` : ""}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------- Add competitor modal (manual entry) ---------- */
+function AddCompetitorModal({
+  onClose,
+  onAdd,
+}: {
+  onClose: () => void;
+  onAdd: (item: CompetitorDraft) => void;
+}) {
+  const [name, setName] = useState("");
+  const [productUrl, setProductUrl] = useState("");
+  const [revenue, setRevenue] = useState("");
+  const [mau, setMau] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const canSave = name.trim().length > 0;
+
+  function submit() {
+    if (!canSave) return;
+    onAdd({
+      name: name.trim(),
+      productUrl: productUrl.trim() || null,
+      revenue: revenue.trim() || null,
+      mau: mau.trim() || null,
+      topics: [],
+      extension: "unknown",
+      complexity: null,
+      sourceUrl: null,
+      notes,
+    });
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="modal-head">
+        <h3>Add competitor</h3>
+        <span className="spacer" />
+        <button className="btn ghost icon" onClick={onClose}>
+          <Icon.x />
+        </button>
+      </div>
+      <div className="modal-body">
+        <div className="field-grid">
+          <div>
+            <label className="field-label">
+              Name <span style={{ color: "#B91C1C" }}>*</span>
+            </label>
+            <input
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. ToneShift"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="field-label">Product URL</label>
+            <input
+              className="input"
+              value={productUrl}
+              onChange={(e) => setProductUrl(e.target.value)}
+              placeholder="https://..."
+            />
+          </div>
+          <div className="row2">
+            <div>
+              <label className="field-label">Revenue</label>
+              <input
+                className="input"
+                value={revenue}
+                onChange={(e) => setRevenue(e.target.value)}
+                placeholder="$5k/mo"
+              />
+            </div>
+            <div>
+              <label className="field-label">MAU</label>
+              <input
+                className="input"
+                value={mau}
+                onChange={(e) => setMau(e.target.value)}
+                placeholder="8.4k"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="field-label">Notes</label>
+            <textarea
+              className="textarea"
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="What stands out about this competitor..."
             />
           </div>
         </div>

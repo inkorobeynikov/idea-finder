@@ -3,6 +3,7 @@
 
 import { createClient } from "@/utils/supabase/client";
 import {
+  Competitor,
   Complexity,
   CwsItem,
   CwsSource,
@@ -38,6 +39,7 @@ interface ParsedIdeaRow {
   extension: string | null;
   complexity: string | null;
   parsed_at: string;
+  product_url: string | null;
   research_analysis: string | null;
   research_comments: ResearchComment[] | null;
   research_web: ResearchWebResult[] | null;
@@ -57,6 +59,20 @@ interface IdeaPageRow {
 interface IdeaPageItemRow {
   idea_page_id: string;
   parsed_idea_id: string;
+}
+
+interface CompetitorRow {
+  id: string;
+  idea_page_id: string;
+  name: string;
+  product_url: string | null;
+  revenue: string | null;
+  mau: string | null;
+  topics: string[] | null;
+  extension: string | null;
+  complexity: string | null;
+  source_url: string | null;
+  notes: string | null;
 }
 
 interface CwsItemRow {
@@ -105,6 +121,7 @@ function mapIdea(r: ParsedIdeaRow): ParsedIdea {
     extension: (r.extension ?? "unknown") as Extension,
     complexity: (r.complexity ?? "medium") as Complexity,
     date: r.parsed_at,
+    productUrl: r.product_url,
     researchAnalysis: r.research_analysis,
     researchComments: r.research_comments ?? [],
     researchWeb: r.research_web ?? [],
@@ -139,6 +156,22 @@ function mapCws(r: CwsItemRow): CwsItem {
   };
 }
 
+function mapCompetitor(r: CompetitorRow): Competitor {
+  return {
+    id: r.id,
+    ideaPageId: r.idea_page_id,
+    name: r.name,
+    productUrl: r.product_url,
+    revenue: r.revenue,
+    mau: r.mau,
+    topics: (r.topics ?? []) as Topic[],
+    extension: (r.extension ?? "unknown") as Extension,
+    complexity: (r.complexity ?? null) as Complexity | null,
+    sourceUrl: r.source_url,
+    notes: r.notes ?? "",
+  };
+}
+
 function mapKeyword(r: SeoKeywordRow): SeoKeyword {
   return {
     id: r.id,
@@ -167,19 +200,28 @@ export interface InitialData {
   cws: Record<string, CwsItem[]>;
   keywords: Record<string, SeoKeyword[]>;
   seoUrls: Record<string, SeoResearchUrl[]>;
+  competitors: Record<string, Competitor[]>;
 }
 
 export async function fetchAll(): Promise<InitialData> {
   const supabase = db();
-  const [ideasRes, pagesRes, itemsRes, cwsRes, keywordsRes, seoUrlsRes] =
-    await Promise.all([
-      supabase.from("parsed_ideas").select("*").order("parsed_at", { ascending: false }),
-      supabase.from("idea_pages").select("*").order("created_at", { ascending: false }),
-      supabase.from("idea_page_items").select("idea_page_id, parsed_idea_id"),
-      supabase.from("cws_items").select("*").order("created_at", { ascending: true }),
-      supabase.from("seo_keywords").select("*").order("kd", { ascending: true }),
-      supabase.from("seo_research_urls").select("*"),
-    ]);
+  const [
+    ideasRes,
+    pagesRes,
+    itemsRes,
+    cwsRes,
+    keywordsRes,
+    seoUrlsRes,
+    competitorsRes,
+  ] = await Promise.all([
+    supabase.from("parsed_ideas").select("*").order("parsed_at", { ascending: false }),
+    supabase.from("idea_pages").select("*").order("created_at", { ascending: false }),
+    supabase.from("idea_page_items").select("idea_page_id, parsed_idea_id"),
+    supabase.from("cws_items").select("*").order("created_at", { ascending: true }),
+    supabase.from("seo_keywords").select("*").order("kd", { ascending: true }),
+    supabase.from("seo_research_urls").select("*"),
+    supabase.from("competitors").select("*").order("added_at", { ascending: true }),
+  ]);
 
   const firstError =
     ideasRes.error ||
@@ -187,7 +229,8 @@ export async function fetchAll(): Promise<InitialData> {
     itemsRes.error ||
     cwsRes.error ||
     keywordsRes.error ||
-    seoUrlsRes.error;
+    seoUrlsRes.error ||
+    competitorsRes.error;
   if (firstError) throw firstError;
 
   const ideas = (ideasRes.data as ParsedIdeaRow[]).map(mapIdea);
@@ -218,7 +261,13 @@ export async function fetchAll(): Promise<InitialData> {
     (seoUrls[u.idea_page_id] ??= []).push(mapResearchUrl(u));
   }
 
-  return { ideas, pages, cws, keywords, seoUrls };
+  // Group competitors by page id.
+  const competitors: Record<string, Competitor[]> = {};
+  for (const c of competitorsRes.data as CompetitorRow[]) {
+    (competitors[c.idea_page_id] ??= []).push(mapCompetitor(c));
+  }
+
+  return { ideas, pages, cws, keywords, seoUrls, competitors };
 }
 
 /* ---------- Mutations ---------- */
@@ -243,6 +292,14 @@ export async function updateIdeaResearch(
   if (patch.researchedAt !== undefined) row.researched_at = patch.researchedAt;
 
   const { error } = await db().from("parsed_ideas").update(row).eq("id", id);
+  if (error) throw error;
+}
+
+export async function updateIdeaProductUrl(id: string, url: string): Promise<void> {
+  const { error } = await db()
+    .from("parsed_ideas")
+    .update({ product_url: url || null })
+    .eq("id", id);
   if (error) throw error;
 }
 
@@ -353,6 +410,56 @@ export async function updateCwsRow(
 
 export async function deleteCwsRow(id: string): Promise<void> {
   const { error } = await db().from("cws_items").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/* ---------- Competitors ---------- */
+
+export async function insertCompetitor(
+  pageId: string,
+  item: Omit<Competitor, "id" | "ideaPageId">,
+): Promise<Competitor> {
+  const { data, error } = await db()
+    .from("competitors")
+    .insert({
+      idea_page_id: pageId,
+      name: item.name,
+      product_url: item.productUrl,
+      revenue: item.revenue,
+      mau: item.mau,
+      topics: item.topics,
+      extension: item.extension,
+      complexity: item.complexity,
+      source_url: item.sourceUrl,
+      notes: item.notes,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapCompetitor(data as CompetitorRow);
+}
+
+export async function updateCompetitorRow(
+  id: string,
+  patch: Partial<Omit<Competitor, "id" | "ideaPageId">>,
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (patch.name !== undefined) row.name = patch.name;
+  if (patch.productUrl !== undefined) row.product_url = patch.productUrl;
+  if (patch.revenue !== undefined) row.revenue = patch.revenue;
+  if (patch.mau !== undefined) row.mau = patch.mau;
+  if (patch.topics !== undefined) row.topics = patch.topics;
+  if (patch.extension !== undefined) row.extension = patch.extension;
+  if (patch.complexity !== undefined) row.complexity = patch.complexity;
+  if (patch.sourceUrl !== undefined) row.source_url = patch.sourceUrl;
+  if (patch.notes !== undefined) row.notes = patch.notes;
+
+  const { error } = await db().from("competitors").update(row).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteCompetitorRow(id: string): Promise<void> {
+  const { error } = await db().from("competitors").delete().eq("id", id);
   if (error) throw error;
 }
 

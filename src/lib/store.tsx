@@ -11,23 +11,28 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import {
   addPageItems,
+  deleteCompetitorRow,
   deleteCwsRow,
   deletePageRow,
   deleteSeoResearchUrlRow,
   fetchAll,
+  insertCompetitor,
   insertCws,
   insertPage,
   insertSeoResearchUrl,
   removePageItem,
   ResearchPatch,
   saveKeywords as saveKeywordsRow,
+  updateCompetitorRow,
   updateCwsRow,
+  updateIdeaProductUrl as updateIdeaProductUrlRow,
   updateIdeaResearch as updateIdeaResearchRow,
   updatePageRow,
   updatePageStartupUrl,
   updateSeoResearchUrlRow,
 } from "./api";
 import {
+  Competitor,
   CwsItem,
   IdeaPage,
   ParsedIdea,
@@ -51,6 +56,7 @@ interface Store {
   pages: IdeaPage[];
   getPage: (id: string) => IdeaPage | undefined;
   updateIdeaResearch: (id: string, patch: ResearchPatch) => void;
+  updateIdeaProductUrl: (id: string, url: string) => void;
 
   createPage: (ideaIds: string[], title?: string) => Promise<string>;
   updatePage: (page: IdeaPage) => void;
@@ -64,6 +70,19 @@ interface Store {
   addCws: (pageId: string, item: Omit<CwsItem, "id">) => void;
   updateCws: (pageId: string, cwsId: string, patch: Partial<CwsItem>) => void;
   removeCws: (pageId: string, cwsId: string) => void;
+
+  // competitors, keyed by page id
+  getCompetitors: (pageId: string) => Competitor[];
+  addCompetitor: (
+    pageId: string,
+    item: Omit<Competitor, "id" | "ideaPageId">,
+  ) => void;
+  updateCompetitor: (
+    pageId: string,
+    id: string,
+    patch: Partial<Omit<Competitor, "id" | "ideaPageId">>,
+  ) => void;
+  removeCompetitor: (pageId: string, id: string) => void;
 
   // SEO keyword research, keyed by page id
   getKeywords: (pageId: string) => SeoKeyword[];
@@ -97,6 +116,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [cws, setCws] = useState<Record<string, CwsItem[]>>({});
   const [keywords, setKeywords] = useState<Record<string, SeoKeyword[]>>({});
   const [seoUrls, setSeoUrls] = useState<Record<string, SeoResearchUrl[]>>({});
+  const [competitors, setCompetitors] = useState<Record<string, Competitor[]>>({});
 
   // Resolve auth state and subscribe to changes.
   useEffect(() => {
@@ -115,6 +135,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setCws({});
         setKeywords({});
         setSeoUrls({});
+        setCompetitors({});
       }
     });
     return () => {
@@ -135,6 +156,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setCws(d.cws);
         setKeywords(d.keywords);
         setSeoUrls(d.seoUrls);
+        setCompetitors(d.competitors);
         setLoadError(null);
         setDataReady(true);
       })
@@ -182,6 +204,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     updateIdeaResearchRow(id, patch).catch(console.error);
   }, []);
 
+  const updateIdeaProductUrl = useCallback((id: string, url: string) => {
+    setIdeas((arr) =>
+      arr.map((it) => (it.id === id ? { ...it, productUrl: url || null } : it)),
+    );
+    updateIdeaProductUrlRow(id, url).catch(console.error);
+  }, []);
+
   const createPage = useCallback(async (ideaIds: string[], title = "") => {
     const page = await insertPage(title, ideaIds ?? []);
     setPages((p) => [page, ...p]);
@@ -210,6 +239,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return n;
     });
     setSeoUrls((m) => {
+      const n = { ...m };
+      delete n[id];
+      return n;
+    });
+    setCompetitors((m) => {
       const n = { ...m };
       delete n[id];
       return n;
@@ -269,6 +303,52 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       [pageId]: (m[pageId] ?? []).filter((c) => c.id !== cwsId),
     }));
     deleteCwsRow(cwsId).catch(console.error);
+  }, []);
+
+  /* ---------- competitors ---------- */
+
+  const getCompetitors = useCallback(
+    (pageId: string) => competitors[pageId] ?? [],
+    [competitors],
+  );
+
+  const addCompetitor = useCallback(
+    (pageId: string, item: Omit<Competitor, "id" | "ideaPageId">) => {
+      insertCompetitor(pageId, item)
+        .then((row) =>
+          setCompetitors((m) => ({
+            ...m,
+            [pageId]: [...(m[pageId] ?? []), row],
+          })),
+        )
+        .catch(console.error);
+    },
+    [],
+  );
+
+  const updateCompetitor = useCallback(
+    (
+      pageId: string,
+      id: string,
+      patch: Partial<Omit<Competitor, "id" | "ideaPageId">>,
+    ) => {
+      setCompetitors((m) => ({
+        ...m,
+        [pageId]: (m[pageId] ?? []).map((c) =>
+          c.id === id ? { ...c, ...patch } : c,
+        ),
+      }));
+      updateCompetitorRow(id, patch).catch(console.error);
+    },
+    [],
+  );
+
+  const removeCompetitor = useCallback((pageId: string, id: string) => {
+    setCompetitors((m) => ({
+      ...m,
+      [pageId]: (m[pageId] ?? []).filter((c) => c.id !== id),
+    }));
+    deleteCompetitorRow(id).catch(console.error);
   }, []);
 
   /* ---------- SEO keywords ---------- */
@@ -351,6 +431,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     pages,
     getPage,
     updateIdeaResearch,
+    updateIdeaProductUrl,
     createPage,
     updatePage,
     deletePage,
@@ -361,6 +442,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     addCws,
     updateCws,
     removeCws,
+    getCompetitors,
+    addCompetitor,
+    updateCompetitor,
+    removeCompetitor,
     getKeywords,
     saveKeywords,
     getSeoUrls,
